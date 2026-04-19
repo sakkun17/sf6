@@ -2,12 +2,250 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>テスト復帰</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>キャラメモアプリ</title>
+
+<style>
+body {
+  margin: 0;
+  font-family: sans-serif;
+  background: #1a1a2e;
+  color: #fff;
+}
+
+.container {
+  display: flex;
+  height: 100vh;
+}
+
+#list {
+  width: 30%;
+  background: #16213e;
+  padding: 10px;
+  overflow-y: auto;
+}
+
+#detail {
+  flex: 1;
+  padding: 15px;
+  overflow-y: auto;
+}
+
+@media (max-width: 768px) {
+  .container { flex-direction: column; }
+  #list { width: 100%; height: 40%; }
+  #detail { height: 60%; }
+}
+
+input, textarea {
+  width: 100%;
+  padding: 10px;
+  margin-top: 5px;
+  border-radius: 8px;
+  border: none;
+  background: #0f3460;
+  color: #fff;
+}
+
+textarea {
+  resize: none;
+  overflow: hidden;
+  line-height: 1.8;
+  min-height: 80px;
+}
+
+button {
+  width: 100%;
+  padding: 8px;
+  margin-top: 5px;
+  border-radius: 8px;
+  border: none;
+  background: #e94560;
+  color: white;
+}
+
+.item {
+  background: #0f3460;
+  margin-top: 5px;
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+</style>
 </head>
+
 <body>
-<h1>アプリ復帰OK</h1>
-<script>
-console.log("JSも動いてる");
+
+<div class="container">
+
+<div id="list">
+  <h3>キャラ一覧</h3>
+  <input id="searchInput" placeholder="検索" oninput="renderList()">
+  <input id="nameInput" placeholder="キャラ名">
+  <button onclick="addCharacter()">追加</button>
+  <div id="characters"></div>
+</div>
+
+<div id="detail">
+  <h3 id="title">キャラを選択</h3>
+
+  <input type="file" onchange="uploadImage(event)">
+  <img id="preview">
+
+  <label>弱点</label>
+  <textarea id="weak" oninput="autoSave(); autoResize(this)"></textarea>
+
+  <label>強み</label>
+  <textarea id="strong" oninput="autoSave(); autoResize(this)"></textarea>
+
+  <label>対策</label>
+  <textarea id="strategy" oninput="autoSave(); autoResize(this)"></textarea>
+
+  <button onclick="deleteCharacter()">削除</button>
+</div>
+
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyB5PXcuGrIOmH3Dl9mw43dN4HRHmJMHdjM",
+  authDomain: "sf6taisaku.firebaseapp.com",
+  projectId: "sf6taisaku",
+  storageBucket: "sf6taisaku.firebasestorage.app",
+  messagingSenderId: "1059320996908",
+  appId: "1:1059320996908:web:74728599686be4f0be5d89"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+let data = [];
+let selectedIndex = null;
+
+/* 🔥 読み込み */
+async function loadData() {
+  const snap = await getDoc(doc(db, "chars", "main"));
+  if (snap.exists()) {
+    data = snap.data().list || [];
+  }
+  renderList();
+}
+
+/* 🔥 保存 */
+async function saveData() {
+  await setDoc(doc(db, "chars", "main"), {
+    list: data
+  });
+}
+
+/* UI */
+function renderList() {
+  const container = document.getElementById("characters");
+  const keyword = document.getElementById("searchInput").value.toLowerCase();
+
+  container.innerHTML = "";
+
+  data.forEach((c, i) => {
+    if (!c.name.toLowerCase().includes(keyword)) return;
+
+    const div = document.createElement("div");
+    div.className = "item";
+    div.textContent = c.name;
+    div.onclick = () => selectCharacter(i);
+
+    container.appendChild(div);
+  });
+}
+
+function addCharacter() {
+  const name = document.getElementById("nameInput").value;
+  if (!name) return;
+
+  data.push({ name, weak: "", strong: "", strategy: "", image: "" });
+  document.getElementById("nameInput").value = "";
+
+  saveData();
+  renderList();
+}
+
+function selectCharacter(index) {
+  selectedIndex = index;
+  const c = data[index];
+
+  const weak = document.getElementById("weak");
+  const strong = document.getElementById("strong");
+  const strategy = document.getElementById("strategy");
+
+  document.getElementById("title").textContent = c.name;
+
+  weak.value = c.weak;
+  strong.value = c.strong;
+  strategy.value = c.strategy;
+
+  document.getElementById("preview").src = c.image || "";
+
+  autoResize(weak);
+  autoResize(strong);
+  autoResize(strategy);
+}
+
+function autoResize(el) {
+  el.style.height = "auto";
+  el.style.height = el.scrollHeight + "px";
+}
+
+function autoSave() {
+  if (selectedIndex === null) return;
+
+  data[selectedIndex].weak = document.getElementById("weak").value;
+  data[selectedIndex].strong = document.getElementById("strong").value;
+  data[selectedIndex].strategy = document.getElementById("strategy").value;
+
+  saveData();
+}
+
+function deleteCharacter() {
+  if (selectedIndex === null) return;
+  if (!confirm("削除しますか？")) return;
+
+  data.splice(selectedIndex, 1);
+  selectedIndex = null;
+
+  document.getElementById("title").textContent = "キャラを選択";
+  document.getElementById("weak").value = "";
+  document.getElementById("strong").value = "";
+  document.getElementById("strategy").value = "";
+  document.getElementById("preview").src = "";
+
+  saveData();
+  renderList();
+}
+
+function uploadImage(event) {
+  if (selectedIndex === null) return;
+
+  const file = event.target.files[0];
+  const reader = new FileReader();
+
+  reader.onload = function(e) {
+    data[selectedIndex].image = e.target.result;
+    document.getElementById("preview").src = e.target.result;
+    saveData();
+  };
+
+  if (file) reader.readAsDataURL(file);
+}
+
+/* HTMLから呼べるように */
+window.addCharacter = addCharacter;
+window.deleteCharacter = deleteCharacter;
+
+/* 初期読み込み */
+loadData();
 </script>
+
 </body>
 </html>
